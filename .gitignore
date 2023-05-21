@@ -1,0 +1,16 @@
+.vs
+build
+Test/output
+
+*.sln
+*.vcxproj
+*.vcxproj.*
+
+ThirdParty/
+include/boost
+include/opencv2
+include/libnest2d
+
+include/clipper.hpp
+include/nlopt.hpp
+include/nlopt.h

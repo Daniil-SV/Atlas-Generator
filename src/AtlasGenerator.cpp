@@ -129,31 +129,31 @@ namespace sc {
 		}
 	}
 
-	AtlasGeneratorResult AtlasGenerator::GetImagePolygon(AtlasGeneratorItem& item, AtlasGeneratorConfig& config)
+	AtlasGeneratorResult AtlasGenerator::GetImagePolygon(AtlasGeneratorItem& item, cv::Mat& image, AtlasGeneratorConfig& config)
 	{
 		using namespace cv;
 
-		Mat imageMask;
+		Mat polygonMask;
 		switch (item.image.channels())
 		{
 		case 4:
-			extractChannel(item.image, imageMask, 3);
+			extractChannel(item.image, polygonMask, 3);
 			break;
 		case 2:
-			extractChannel(item.image, imageMask, 1);
+			extractChannel(item.image, polygonMask, 1);
 			break;
 		default:
-			imageMask = Mat(item.image.size(), CV_8UC1, Scalar(255));
+			polygonMask = Mat(item.image.size(), CV_8UC1, Scalar(255));
 			break;
 		}
 
-		Rect imageBounds = boundingRect(imageMask);
+		Rect imageBounds = boundingRect(polygonMask);
 
 		Size srcSize = item.image.size();
-		Size dstSize = imageMask.size();
+		Size dstSize = polygonMask.size();
 
-		item.image = item.image(imageBounds);
-		imageMask = imageMask(imageBounds);
+		image = item.image(imageBounds);
+		polygonMask = polygonMask(imageBounds);
 
 		if (IsRectangle(item.image, config)) {
 			item.polygon = vector<AtlasGeneratorVertex>(4);
@@ -174,14 +174,14 @@ namespace sc {
 			item.polygon.clear();
 		}
 
-		vector<Point> contour = GetImageContour(imageMask);
+		vector<Point> contour = GetImageContour(polygonMask);
 #ifdef CV_DEBUG
 		ShowContour(item.image, contour);
 #endif
 		vector<Point> contourHull;
 		vector<Point> polygon;
 
-		SnapPoints(imageMask, contour);
+		SnapPoints(polygonMask, contour);
 
 		convexHull(contour, polygon, true);
 		
@@ -265,24 +265,64 @@ namespace sc {
 		}
 	};
 
+	uint32_t AtlasGenerator::GetImageIndex(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range) {
+		using namespace cv;
+
+		for (uint32_t i = 0; range > i; i++) {
+			Mat& other = items[i].image;
+
+			if (other.cols != image.cols || other.rows != image.rows) continue;
+			int imageChannelsCount = image.channels();
+			int otherChannelsCount = image.channels();
+
+			if (imageChannelsCount != otherChannelsCount) continue;
+
+			vector<Mat> channels(imageChannelsCount);
+			vector<Mat> otherChannels(imageChannelsCount);
+			split(image, channels);
+			split(other, otherChannels);
+
+			size_t pixelCount = image.rows * image.cols;
+			for (int j = 0; imageChannelsCount > j; j++) {
+				for (int w = 0; image.cols > w; w++) {
+					for (int h = 0; image.rows > h; h++) {
+						uchar pix = channels[j].at<uchar>(h, w);
+						uchar otherPix = otherChannels[j].at<uchar>(h, w);
+						if (pix != otherPix) {
+							return UINT32_MAX;
+						}
+					}
+				}
+
+			}
+			
+			return i;
+		}
+
+		return UINT32_MAX;
+	}
+
 	AtlasGeneratorResult AtlasGenerator::Generate(vector<AtlasGeneratorItem>& items, vector<cv::Mat>& atlases, AtlasGeneratorConfig& config) {
 		using namespace libnest2d;
 		NormalizeConfig(config);
 
 		// Duplicated images
-		vector<pair<uint32_t, uint32_t>> duplicates;
-		//	 Src image index, dst image offset
+		vector<size_t> duplicates;
 
 		// Vector with polygons for libnest2d
 		vector<Item> packerItems;
+
+		// Croped images
+		vector<cv::Mat> images;
 		for (uint32_t i = 0; items.size() > i; i++) {
 			AtlasGeneratorItem& item = items[i];
-
 			uint32_t imageIndex = GetImageIndex(items, item.image, i);
 
 			if (imageIndex == UINT32_MAX) {
 				// Polygon generation
-				GetImagePolygon(item, config);
+				cv::Mat polygonImage;
+				GetImagePolygon(item, polygonImage, config);
+				images.push_back(polygonImage);
 
 				if (item.polygon.size() <= 0) {
 					return AtlasGeneratorResult::BAD_POLYGON;
@@ -301,9 +341,10 @@ namespace sc {
 				}
 
 				packerItems.push_back(packerItem);
+				duplicates.push_back(SIZE_MAX);
 			}
 			else {
-				duplicates.push_back({ imageIndex, i });
+				duplicates.push_back(imageIndex);
 			}
 		}
 
@@ -329,10 +370,10 @@ namespace sc {
 			auto y = getY(box.maxCorner());
 
 			if (x > size.height) {
-				size.height = x;
+				size.height = (int)x;
 			}
 			if (y > size.width) {
-				size.width = y;
+				size.width = (int)y;
 			}
 		}
 
@@ -340,16 +381,24 @@ namespace sc {
 		{
 			atlases.push_back(
 				cv::Mat(
-					size.width,
-					size.height,
+					size.width + config.extrude,
+					size.height + config.extrude,
 					(int)config.textureType,
 					cv::Scalar(0)
 				)
 			);
 		}
 
+		uint32_t itemOffset = 0;
 		for (uint32_t i = 0; items.size() > i; i++) {
-			Item& packerItem = packerItems[i];
+			bool isDuplicate = duplicates[i] != SIZE_MAX;
+			if (isDuplicate) {
+				items[i] = items[duplicates[i]];
+				itemOffset++;
+				continue;
+			}
+
+			Item& packerItem = packerItems[i - itemOffset];
 			AtlasGeneratorItem& item = items[i];
 			cv::Mat& atlas = atlases[packerItem.binId()];
 
@@ -368,24 +417,24 @@ namespace sc {
 			}
 
 			// Image processing
-			cv::Mat atlasSprite = item.image.clone();
+			cv::Mat sprite = images[i - itemOffset].clone();
 			if (rotationAngle != 0) {
-				cv::Point2f center((float)((atlasSprite.cols - 1) / 2.0), (float)((atlasSprite.rows - 1) / 2.0));
+				cv::Point2f center((float)((sprite.cols - 1) / 2.0), (float)((sprite.rows - 1) / 2.0));
 				cv::Mat rot = cv::getRotationMatrix2D(center, rotationAngle, 1.0);
-				cv::Rect2f bbox = cv::RotatedRect(cv::Point2f(), atlasSprite.size(), (float)rotationAngle).boundingRect2f();
+				cv::Rect2f bbox = cv::RotatedRect(cv::Point2f(), sprite.size(), (float)rotationAngle).boundingRect2f();
 
-				rot.at<double>(0, 2) += bbox.width / 2.0 - item.image.cols / 2.0;
-				rot.at<double>(1, 2) += bbox.height / 2.0 - item.image.rows / 2.0;
+				rot.at<double>(0, 2) += bbox.width / 2.0 - sprite.cols / 2.0;
+				rot.at<double>(1, 2) += bbox.height / 2.0 - sprite.rows / 2.0;
 
-				cv::warpAffine(atlasSprite, atlasSprite, rot, bbox.size(), cv::INTER_NEAREST);
+				cv::warpAffine(sprite, sprite, rot, bbox.size(), cv::INTER_NEAREST);
 			}
 
-			cv::copyMakeBorder(atlasSprite, atlasSprite, config.extrude, config.extrude, config.extrude, config.extrude, cv::BORDER_REPLICATE);
+			cv::copyMakeBorder(sprite, sprite, config.extrude, config.extrude, config.extrude, config.extrude, cv::BORDER_REPLICATE);
 
 			auto x = getX(box.minCorner());
 			auto y = getY(box.minCorner());
 			PlaceImage(
-				atlasSprite,
+				sprite,
 				atlas,
 				static_cast<uint16_t>(x - config.extrude),
 				static_cast<uint16_t>(y - config.extrude)

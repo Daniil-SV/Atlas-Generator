@@ -101,7 +101,7 @@ namespace sc {
 		static vector<cv::Point> GetImageContour(cv::Mat& image);
 		static void SnapPoints(cv::Mat src, vector<cv::Point>& points);
 
-		static AtlasGeneratorResult GetImagePolygon(AtlasGeneratorItem& item, AtlasGeneratorConfig& config);
+		static AtlasGeneratorResult GetImagePolygon(AtlasGeneratorItem& item, cv::Mat& image, AtlasGeneratorConfig& config);
 
 		static void NormalizeConfig(AtlasGeneratorConfig& config);
 
@@ -109,9 +109,7 @@ namespace sc {
 
 		static void PlaceImage(cv::Mat& src, cv::Mat& dst, uint16_t x, uint16_t y);
 
-		static uint32_t GetImageIndex(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range) {
-			return UINT32_MAX;
-		}
+		static uint32_t GetImageIndex(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range);
 
 	public:
 		static AtlasGeneratorResult Generate(vector<AtlasGeneratorItem>& items, vector<cv::Mat>& atlases, AtlasGeneratorConfig& config);

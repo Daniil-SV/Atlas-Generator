@@ -390,8 +390,8 @@ namespace sc {
 		{
 			atlases.push_back(
 				cv::Mat(
-					size.width + config.extrude,
-					size.height + config.extrude,
+					size.width,
+					size.height,
 					(int)config.textureType,
 					cv::Scalar(0)
 				)
@@ -420,9 +420,14 @@ namespace sc {
 			// Point processing
 			item.textureIndex = static_cast<uint8_t>(packerItem.binId());
 			for (size_t j = 0; item.polygon.size() > j; j++) {
-				uint16_t x = static_cast<uint16_t>(shape.Contour[j + 1].X);
-				uint16_t y = static_cast<uint16_t>(shape.Contour[j + 1].Y);
-				item.polygon[j].uv = {x, y};
+				
+				uint16_t x = item.polygon[j].uv.first;
+				uint16_t y = item.polygon[j].uv.second;
+
+				uint16_t u = (uint16_t)ceil(x * rotation.cos() - y * rotation.sin() + getX(packerItem.translation()) );
+				uint16_t v = (uint16_t)ceil(y * rotation.cos() + x * rotation.sin() + getY(packerItem.translation()) );
+
+				item.polygon[j].uv = {u, v};
 			}
 
 			// Image processing

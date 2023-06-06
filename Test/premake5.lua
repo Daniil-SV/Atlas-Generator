@@ -20,8 +20,6 @@ links {
 	"AtlasGenerator"
 }
 
-defines { "LIBNEST2D_GEOMETRIES_clipper", "LIBNEST2D_OPTIMIZER_nlopt" }
-
 filter "configurations:Debug"
 links {
 	"../ThirdParty/lib/opencv/%{cfg.architecture}/%{cfg.system}/static/opencv_world470d"

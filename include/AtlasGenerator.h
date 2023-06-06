@@ -4,6 +4,9 @@
 #include <map>
 
 #include <opencv2/opencv.hpp>
+
+#define LIBNEST2D_GEOMETRIES_clipper
+#define LIBNEST2D_OPTIMIZER_nlopt
 #include <libnest2d/libnest2d.hpp>
 
 #define MinTextureDimension 512
@@ -17,7 +20,6 @@ using libnest2d::ProgressFunction;
 namespace sc {
 	enum class AtlasGeneratorResult {
 		OK = 0,
-		BAD_IMAGE,
 		BAD_POLYGON,
 		TOO_MANY_IMAGES
 	};
@@ -34,8 +36,7 @@ namespace sc {
 		};
 
 		TextureType textureType = TextureType::RGBA;
-		uint16_t maxWidth = 2048;
-		uint16_t maxHeight = 2048;
+		pair<uint16_t, uint16_t> maxSize = { 2048, 2048 };
 		uint8_t extrude = 2;
 		libnest2d::NestControl control = {};
 	};
@@ -71,7 +72,7 @@ namespace sc {
 #ifdef DEBUG
 		inline static cv::RNG rng = cv::RNG(time(NULL));
 		static void ShowImage(string name, cv::Mat image) {
-			//cv::namedWindow(name, cv::WINDOW_NORMAL);
+			cv::namedWindow(name, cv::WINDOW_NORMAL);
 
 			cv::imshow(name, image);
 			cv::waitKey(0);

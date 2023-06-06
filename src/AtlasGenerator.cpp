@@ -1,22 +1,23 @@
 #include "AtlasGenerator.h"
+#include "AtlasGeneratorPlacer.hpp"
 
-#define ProcentOf(proc, num) (num * proc / 100)
+#define PercentOf(proc, num) (num * proc / 100)
 
 namespace sc {
 	void AtlasGenerator::NormalizeConfig(AtlasGeneratorConfig& config)
 	{
-		if (config.maxWidth > MaxTextureDimension) {
-			config.maxWidth = MaxTextureDimension;
+		if (config.maxSize.first > MaxTextureDimension) {
+			config.maxSize.first = MaxTextureDimension;
 		}
-		else if (config.maxWidth < MinTextureDimension) {
-			config.maxWidth = MinTextureDimension;
+		else if (config.maxSize.first < MinTextureDimension) {
+			config.maxSize.first = MinTextureDimension;
 		}
 
-		if (config.maxHeight > MaxTextureDimension) {
-			config.maxHeight = MaxTextureDimension;
+		if (config.maxSize.second > MaxTextureDimension) {
+			config.maxSize.second = MaxTextureDimension;
 		}
-		else if (config.maxHeight < MinTextureDimension) {
-			config.maxHeight = MinTextureDimension;
+		else if (config.maxSize.second < MinTextureDimension) {
+			config.maxSize.second = MinTextureDimension;
 		}
 
 		if (config.extrude > MaxExtrude) {
@@ -71,7 +72,7 @@ namespace sc {
 
 		for (Point& point : points) {
 			if (point.x < minW || point.x > maxW) {
-				uint16_t offset = ProcentOf(offsetPercent, src.rows);
+				uint16_t offset = PercentOf(offsetPercent, src.rows);
 
 				if (point.y > src.rows / 2) {
 					if (point.y + offset > src.rows) {
@@ -99,7 +100,7 @@ namespace sc {
 			}
 
 			if (point.y < minH || point.y > maxH) {
-				uint16_t offset = ProcentOf(offsetPercent, src.cols);
+				uint16_t offset = PercentOf(offsetPercent, src.cols);
 
 				if (point.x > src.cols / 2) {
 					if (point.x + offset > src.cols) {
@@ -162,10 +163,10 @@ namespace sc {
 			item.polygon[2].uv = { item.image.cols, item.image.rows };
 			item.polygon[3].uv = { item.image.cols, 0 };
 
-			item.polygon[0].xy = { item.image.cols, 0 };
-			item.polygon[1].xy = { item.image.cols, item.image.rows };
-			item.polygon[2].xy = { 0, item.image.rows };
-			item.polygon[3].xy = { 0, 0 };
+			item.polygon[0].xy = { 0, 0 }; 
+			item.polygon[1].xy = { 0, item.image.rows };
+			item.polygon[2].xy = { item.image.cols, item.image.rows }; 
+			item.polygon[3].xy = { item.image.cols, 0 }; 
 
 			return AtlasGeneratorResult::OK;
 		}
@@ -173,52 +174,21 @@ namespace sc {
 			item.polygon.clear();
 		}
 
-		//resize(imageMask, imageMask, { imageMask.cols / 2, imageMask.rows / 2 });
-
-		/*if (imageMask.cols > (config.maxWidth * 10 / 100) && imageMask.rows > (config.maxWidth * 10 / 100)) {
-			Mat closedImagemask = imageMask.clone();
-			Mat closeKernel = getStructuringElement(MORPH_RECT, Size(imageMask.cols * 5 / 100, imageMask.rows * 5 / 100));
-			morphologyEx(closedImagemask, closedImagemask, MORPH_DILATE, closeKernel);
-
-			bitwise_or(imageMask, closedImagemask, imageMask);
-		}*/
-
 		vector<Point> contour = GetImageContour(imageMask);
-#ifdef DEBUG
+#ifdef CV_DEBUG
 		ShowContour(item.image, contour);
 #endif
 		vector<Point> contourHull;
 		vector<Point> polygon;
-
-		//convexHull(contour, contourHull, true);
-
-		//double approxMultiplier = 0.075;
-
-		/*if (contourHull.size() >= ProcentOf(10, contour.size())) {
-			int dilateW = imageMask.cols * 2 / 100;
-			int dilateH = imageMask.rows * 2 / 100;
-			Mat dilateKernel = getStructuringElement(MORPH_RECT, Size(dilateW <= 0 ? 1 : dilateW, dilateH <= 0 ? 1 : dilateH));
-			morphologyEx(imageMask, imageMask, MORPH_DILATE, dilateKernel);
-
-			int blurW = imageMask.cols * 5 / 100;
-			int blurH = imageMask.rows * 5 / 100;
-			blur(imageMask, imageMask, Size(blurW <= 0 ? 1 : blurW, blurH <= 0 ? 1 : blurH));
-
-			contour = GetImageContour(imageMask);
-		}*/
 
 		SnapPoints(imageMask, contour);
 
 		convexHull(contour, polygon, true);
 		
 
-#ifdef DEBUG
+#ifdef CV_DEBUG
 		ShowContour(item.image, polygon);
 #endif
-
-		//approxPolyDP(contour, polygon, 0.25 * contour.size(), true);
-
-		//ShowImage("Gray", imageMask);
 
 		for (const Point point : polygon) {
 			item.polygon.push_back(
@@ -227,8 +197,8 @@ namespace sc {
 			);
 		}
 
-#ifdef DEBUG
-		//ShowContour(item.image, item.polygon);
+#ifdef CV_DEBUG
+		ShowContour(item.image, item.polygon);
 #endif
 
 		return AtlasGeneratorResult::OK;
@@ -241,7 +211,7 @@ namespace sc {
 		Size size = image.size();
 		int channels = image.channels();
 
-		if (size.width < (config.maxWidth * 3 / 100) && size.height < (config.maxHeight * 3 / 100)) {
+		if (size.width < (config.maxSize.first * 3 / 100) && size.height < (config.maxSize.second * 3 / 100)) {
 			return true;
 		}
 
@@ -337,50 +307,41 @@ namespace sc {
 			}
 		}
 
-		NestConfig<BottomLeftPlacer> cfg;
-		cfg.placer_config.allow_rotations = true;
+		NestConfig<BottomLeftPlacer, DJDHeuristic> cfg;
 		cfg.placer_config.epsilon = config.extrude;
-		size_t binCount = nest(packerItems, Box(config.maxWidth, config.maxHeight), config.extrude, cfg, config.control);
+		cfg.placer_config.allow_rotations = true;
+
+		size_t binCount = nest(packerItems, Box(config.maxSize.first, config.maxSize.second, { config.maxSize.first / 2, config.maxSize.second / 2 }), config.extrude, cfg, config.control);
 		if (binCount >= 0xFF) return AtlasGeneratorResult::TOO_MANY_IMAGES;
 
-		vector<cv::Size> sheetSizes(binCount);
-		for (uint32_t i = 0; items.size() > i; i++) {
-			Item& packerItem = packerItems[i];
-			AtlasGeneratorItem& item = items[i];
+		// Texture preparing
+		vector<cv::Size> textureSize(binCount);
+		for (size_t i = 0; packerItems.size() > i; i++) {
+			Item& item = packerItems[i];
+			if (item.binId() == libnest2d::BIN_ID_UNSET) return AtlasGeneratorResult::BAD_POLYGON;
 
-			if (packerItem.binId() == libnest2d::BIN_ID_UNSET) return AtlasGeneratorResult::BAD_POLYGON;
+			auto shape = item.transformedShape();
+			auto box = item.boundingBox();
+			
+			cv::Size& size = textureSize[item.binId()];
 
-			auto rotation = packerItem.rotation();
-			double rotationAngle = -(rotation.toDegrees());
+			auto x = getX(box.maxCorner());
+			auto y = getY(box.maxCorner());
 
-			auto translation = packerItem.translation();
-
-			item.textureIndex = static_cast<uint8_t>(packerItem.binId());
-			for (uint16_t p = 0; item.polygon.size() > p; p++) {
-				uint16_t x = item.polygon[p].uv.first;
-				uint16_t y = item.polygon[p].uv.second;
-
-				uint16_t u = (uint16_t)ceil(x * rotation.cos() - y * rotation.sin() + translation.X);
-				uint16_t v = (uint16_t)ceil(y * rotation.cos() + x * rotation.sin() + translation.Y);
-
-				if (v > sheetSizes[packerItem.binId()].width) {
-					sheetSizes[packerItem.binId()].width = v;
-				}
-
-				if (u > sheetSizes[packerItem.binId()].height) {
-					sheetSizes[packerItem.binId()].height = u;
-				}
-
-				item.polygon[p].uv = { u , v };
+			if (x > size.height) {
+				size.height = x;
+			}
+			if (y > size.width) {
+				size.width = y;
 			}
 		}
 
-		for (cv::Size& size : sheetSizes)
+		for (cv::Size& size : textureSize)
 		{
 			atlases.push_back(
 				cv::Mat(
-					size.width + config.extrude,
-					size.height + config.extrude,
+					size.width,
+					size.height,
 					(int)config.textureType,
 					cv::Scalar(0)
 				)
@@ -390,17 +351,24 @@ namespace sc {
 		for (uint32_t i = 0; items.size() > i; i++) {
 			Item& packerItem = packerItems[i];
 			AtlasGeneratorItem& item = items[i];
-
 			cv::Mat& atlas = atlases[packerItem.binId()];
 
 			auto rotation = packerItem.rotation();
 			double rotationAngle = -(rotation.toDegrees());
 
-			auto translation = packerItem.translation();
+			auto shape = packerItem.transformedShape();
+			auto box = packerItem.boundingBox();
 
+			// Point processing
+			item.textureIndex = static_cast<uint8_t>(packerItem.binId());
+			for (size_t j = 0; item.polygon.size() > j; j++) {
+				uint16_t x = static_cast<uint16_t>(shape.Contour[j + 1].X);
+				uint16_t y = static_cast<uint16_t>(shape.Contour[j + 1].Y);
+				item.polygon[j].uv = {x, y};
+			}
+
+			// Image processing
 			cv::Mat atlasSprite = item.image.clone();
-
-			// Image rotation
 			if (rotationAngle != 0) {
 				cv::Point2f center((float)((atlasSprite.cols - 1) / 2.0), (float)((atlasSprite.rows - 1) / 2.0));
 				cv::Mat rot = cv::getRotationMatrix2D(center, rotationAngle, 1.0);
@@ -412,18 +380,19 @@ namespace sc {
 				cv::warpAffine(atlasSprite, atlasSprite, rot, bbox.size(), cv::INTER_NEAREST);
 			}
 
-			// Image extrude
 			cv::copyMakeBorder(atlasSprite, atlasSprite, config.extrude, config.extrude, config.extrude, config.extrude, cv::BORDER_REPLICATE);
 
+			auto x = getX(box.minCorner());
+			auto y = getY(box.minCorner());
 			PlaceImage(
 				atlasSprite,
 				atlas,
-				(uint16_t)ceil(translation.X) - config.extrude, // TODO: This may not work correctly due to the fact that algorithm almost never rotates polygons
-				(uint16_t)ceil(translation.Y) - config.extrude  // and it is impossible to understand whether translition is correct when there is also rotation
+				static_cast<uint16_t>(x - config.extrude),
+				static_cast<uint16_t>(y - config.extrude)
 			);
 		}
 
-#ifdef DEBUG
+#ifdef CV_DEBUG
 		vector<cv::Mat> sheets;
 		cv::RNG rng = cv::RNG(time(NULL));
 

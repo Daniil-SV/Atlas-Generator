@@ -18,8 +18,6 @@ includedirs {
 	"include"
 }
 
-defines { "LIBNEST2D_GEOMETRIES_clipper", "LIBNEST2D_OPTIMIZER_nlopt" }
-
 filter "system:windows"
 defines { "_WINDOWS" }
 

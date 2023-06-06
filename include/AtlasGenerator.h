@@ -99,6 +99,7 @@ namespace sc {
 		}
 #endif
 		static vector<cv::Point> GetImageContour(cv::Mat& image);
+
 		static void SnapPoints(cv::Mat src, vector<cv::Point>& points);
 
 		static AtlasGeneratorResult GetImagePolygon(AtlasGeneratorItem& item, cv::Mat& image, AtlasGeneratorConfig& config);
@@ -110,6 +111,8 @@ namespace sc {
 		static void PlaceImage(cv::Mat& src, cv::Mat& dst, uint16_t x, uint16_t y);
 
 		static uint32_t GetImageIndex(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range);
+
+		static bool CompareImage(cv::Mat src1, cv::Mat src2);
 
 	public:
 		static AtlasGeneratorResult Generate(vector<AtlasGeneratorItem>& items, vector<cv::Mat>& atlases, AtlasGeneratorConfig& config);

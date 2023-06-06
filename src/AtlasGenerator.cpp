@@ -271,35 +271,43 @@ namespace sc {
 		for (uint32_t i = 0; range > i; i++) {
 			Mat& other = items[i].image;
 
-			if (other.cols != image.cols || other.rows != image.rows) continue;
-			int imageChannelsCount = image.channels();
-			int otherChannelsCount = image.channels();
-
-			if (imageChannelsCount != otherChannelsCount) continue;
-
-			vector<Mat> channels(imageChannelsCount);
-			vector<Mat> otherChannels(imageChannelsCount);
-			split(image, channels);
-			split(other, otherChannels);
-
-			size_t pixelCount = image.rows * image.cols;
-			for (int j = 0; imageChannelsCount > j; j++) {
-				for (int w = 0; image.cols > w; w++) {
-					for (int h = 0; image.rows > h; h++) {
-						uchar pix = channels[j].at<uchar>(h, w);
-						uchar otherPix = otherChannels[j].at<uchar>(h, w);
-						if (pix != otherPix) {
-							return UINT32_MAX;
-						}
-					}
-				}
-
+			if (CompareImage(image, other)) {
+				return i;
 			}
-			
-			return i;
 		}
 
 		return UINT32_MAX;
+	}
+
+	bool AtlasGenerator::CompareImage(cv::Mat src1, cv::Mat src2) {
+		using namespace cv;
+
+		if (src1.cols != src2.cols || src1.rows != src2.rows) return false;
+		int imageChannelsCount = src1.channels();
+		int otherChannelsCount = src2.channels();
+
+		if (imageChannelsCount != otherChannelsCount) return false;
+
+		vector<Mat> channels(imageChannelsCount);
+		vector<Mat> otherChannels(imageChannelsCount);
+		split(src1, channels);
+		split(src2, otherChannels);
+
+		size_t pixelCount = src1.rows * src1.cols;
+		for (int j = 0; imageChannelsCount > j; j++) {
+			for (int w = 0; src1.cols > w; w++) {
+				for (int h = 0; src1.rows > h; h++) {
+					uchar pix = channels[j].at<uchar>(h, w);
+					uchar otherPix = otherChannels[j].at<uchar>(h, w);
+					if (pix != otherPix) {
+						return false;
+					}
+				}
+			}
+
+		}
+
+		return true;
 	}
 
 	AtlasGeneratorResult AtlasGenerator::Generate(vector<AtlasGeneratorItem>& items, vector<cv::Mat>& atlases, AtlasGeneratorConfig& config) {
@@ -314,6 +322,7 @@ namespace sc {
 
 		// Croped images
 		vector<cv::Mat> images;
+
 		for (uint32_t i = 0; items.size() > i; i++) {
 			AtlasGeneratorItem& item = items[i];
 			uint32_t imageIndex = GetImageIndex(items, item.image, i);

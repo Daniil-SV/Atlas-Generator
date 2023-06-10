@@ -5,7 +5,9 @@ Test/output
 *.sln
 *.vcxproj
 *.vcxproj.*
+scripts/
 
+# Dependecies 
 ThirdParty/
 include/boost
 include/opencv2

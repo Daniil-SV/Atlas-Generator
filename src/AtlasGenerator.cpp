@@ -1,5 +1,4 @@
 #include "AtlasGenerator.h"
-#include "AtlasGeneratorPlacer.hpp"
 
 #define PercentOf(proc, num) (num * proc / 100)
 

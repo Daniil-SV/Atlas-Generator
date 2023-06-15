@@ -27,7 +27,8 @@ namespace sc {
 	enum class AtlasGeneratorResult {
 		OK = 0,
 		BAD_POLYGON,
-		TOO_MANY_IMAGES
+		TOO_MANY_IMAGES,
+		TOO_BIG_IMAGE
 	};
 }
 

@@ -46,7 +46,7 @@ namespace sc {
 		using namespace cv;
 
 		Mat blurred; 
-		const double sigma = 10, amount = 5;
+		const double sigma = 5, amount = 2.5;
 
 		GaussianBlur(src, blurred, Size(), sigma, sigma);
 		Mat sharpened = src * (1 + amount) + blurred * (-amount);
@@ -362,6 +362,10 @@ namespace sc {
 			if (imageIndex == UINT32_MAX) {
 				// Polygon generation
 				cv::Mat atlasSprite = GetImagePolygon(item, config);
+				if (atlasSprite.cols >= config.maxSize.first || atlasSprite.rows >= config.maxSize.second) {
+					return AtlasGeneratorResult::TOO_BIG_IMAGE;
+				}
+
 				images.push_back(atlasSprite);
 
 				if (item.polygon.size() <= 0) {

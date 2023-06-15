@@ -1,193 +1,226 @@
 #include "AtlasGenerator.h"
 
-#define PercentOf(proc, num) (num * proc / 100)
-
 namespace sc {
 	void AtlasGenerator::NormalizeConfig(AtlasGeneratorConfig& config)
 	{
-		if (config.maxSize.first > MaxTextureDimension) {
-			config.maxSize.first = MaxTextureDimension;
-		}
-		else if (config.maxSize.first < MinTextureDimension) {
-			config.maxSize.first = MinTextureDimension;
-		}
-
-		if (config.maxSize.second > MaxTextureDimension) {
-			config.maxSize.second = MaxTextureDimension;
-		}
-		else if (config.maxSize.second < MinTextureDimension) {
-			config.maxSize.second = MinTextureDimension;
-		}
-
-		if (config.extrude > MaxExtrude) {
-			config.extrude = MaxExtrude;
-		}
-		else if (config.extrude < MinExtrude) {
-			config.extrude = MinExtrude;
-		}
+		config.maxSize.first = (uint16_t)clamp((int)config.maxSize.first, 0, MaxTextureDimension);
+		config.maxSize.second = (uint16_t)clamp((int)config.maxSize.second, 0, MaxTextureDimension);
+		config.scaleFactor = (uint8_t)clamp((int)config.scaleFactor, MinScaleFactor, MaxScaleFactor);
+		config.extrude = (uint8_t)clamp((int)config.extrude, MinExtrude, MaxExtrude);
 	};
+
+	cv::Mat AtlasGenerator::ImagePreprocess(cv::Mat& src) {
+		using namespace cv;
+
+		cv::Mat image = src.clone();
+		Size size = src.size();
+		int channels = src.channels();
+
+		// Alpha "normalize"
+		if (channels == 2 || channels == 4) {
+			for (uint16_t h = 0; size.height > h; h++) {
+				for (uint16_t w = 0; size.width > w; w++) {
+					bool isTransperent = false;
+
+					switch (channels)
+					{
+					case 4:
+						if (image.at<cv::Vec4b>(h, w)[3] < 4) {
+							image.at<cv::Vec4b>(h, w) = { 0, 0, 0, 0 };
+						};
+						break;
+					case 2:
+						if (image.at<cv::Vec2b>(h, w)[1] < 4) {
+							image.at<cv::Vec2b>(h, w) = { 0, 0 };
+						};
+						break;
+					}
+				}
+			}
+		}
+
+		return image;
+	}
+
+	cv::Mat AtlasGenerator::MaskPreprocess(cv::Mat& src) {
+		using namespace cv;
+
+		Mat blurred; 
+		const double sigma = 10, amount = 5;
+
+		GaussianBlur(src, blurred, Size(), sigma, sigma);
+		Mat sharpened = src * (1 + amount) + blurred * (-amount);
+#ifdef CV_DEBUG
+		ShowImage("Mask", sharpened);
+#endif // CV_DEBUG
+
+		return sharpened;
+	}
 
 	vector<cv::Point> AtlasGenerator::GetImageContour(cv::Mat& image)
 	{
 		using namespace cv;
 
 		vector<Point> result;
-		vector<vector<Point>> contours;
 
+		vector<vector<Point>> contours;
 		findContours(image, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-		const double approxMultiplier = 0.0015;
-		if (contours.size() == 1) {
-			double perim = arcLength(contours[0], true);
-			approxPolyDP(contours[0], result, approxMultiplier * perim, true);
-			result = contours[0];
-		}
-		else {
-			for (vector<Point>& points : contours) {
-				vector<Point> reduced;
-				double perim = arcLength(points, true);
-				approxPolyDP(points, reduced, approxMultiplier * perim, true);
+		for (vector<Point>& points : contours) {
+			SnapToBorder(image, points);
 
-				for (Point& point : reduced) {
-					result.push_back(point);
-				}
-			}
+#ifdef CV_DEBUG
+			Mat drawingImage;
+			cvtColor(image, drawingImage, COLOR_GRAY2BGR);
+			ShowContour(drawingImage, points);
+#endif
+
+			move(points.begin(), points.end(), back_inserter(result));
 		}
 
 		return result;
 	}
 
-	void AtlasGenerator::SnapPoints(cv::Mat src, vector<cv::Point>& points) {
+	void AtlasGenerator::ExtrudePoints(cv::Mat src, vector<cv::Point>& points) {
 		using namespace cv;
 
-		const uint8_t offsetPercent = 0;
-		const uint8_t snapPercent = 7;
+		const uint16_t offsetX = (uint16_t)PercentOf(src.cols, 2);
+		const uint16_t offsetY = (uint16_t)PercentOf(src.rows, 2);
 
-		uint16_t minW = src.cols * snapPercent / 100;
-		uint16_t maxW = src.cols - minW;
-
-		uint16_t minH = src.rows * snapPercent / 100;
-		uint16_t maxH = src.rows - minH;
+		const int centerW = (int)ceil(src.cols / 2);
+		const int centerH = (int)ceil(src.rows / 2);
 
 		for (Point& point : points) {
-			if (point.x < minW || point.x > maxW) {
-				uint16_t offset = PercentOf(offsetPercent, src.rows);
+			bool isEdgePoint = (point.x == 0 || point.x == src.cols) && (point.y == 0 || point.y == src.rows);
 
-				if (point.y > src.rows / 2) {
-					if (point.y + offset > src.rows) {
-						point.y = src.rows;
-					}
-					else {
-						point.y += offset;
-					}
+			if (!isEdgePoint) {
+				int x = point.x - centerW;
+				int y = point.y - centerH;
+
+				if (x >= 0) {
+					x += offsetX;
 				}
 				else {
-					if (0 > point.y - offset) {
-						point.y = 0;
-					}
-					else {
-						point.y -= offset;
-					}
+					x -= offsetX;
 				}
 
-				if (point.x < minW) {
-					point.x = 0;
+				if (y >= 0) {
+					y += offsetY;
 				}
 				else {
-					point.x = src.cols;
-				}
-			}
-
-			if (point.y < minH || point.y > maxH) {
-				uint16_t offset = PercentOf(offsetPercent, src.cols);
-
-				if (point.x > src.cols / 2) {
-					if (point.x + offset > src.cols) {
-						point.x = src.cols;
-					}
-					else {
-						point.x += offset;
-					}
-				}
-				else {
-					if (0 > point.x - offset) {
-						point.x = 0;
-					}
-					else {
-						point.x -= offset;
-					}
+					y -= offsetY;
 				}
 
-				if (point.y < minH) {
-					point.y = 0;
-				}
-				else {
-					point.y = src.rows;
-				}
+				point = {
+					clamp(x + centerW, 0, src.cols),
+					clamp(y + centerH, 0, src.rows),
+				};
 			}
 		}
 	}
 
-	AtlasGeneratorResult AtlasGenerator::GetImagePolygon(AtlasGeneratorItem& item, cv::Mat& image, AtlasGeneratorConfig& config)
+	void AtlasGenerator::SnapToBorder(cv::Mat src, vector<cv::Point>& points) {
+		using namespace cv;
+
+		const double snapPercent = 5;
+
+		// Snaping variables
+		const uint16_t minW = (uint16_t)ceil(PercentOf(src.cols, snapPercent));
+		const uint16_t maxW = src.cols - minW;
+
+		const uint16_t minH = (uint16_t)ceil(PercentOf(src.rows, snapPercent));
+		const uint16_t maxH = src.rows - minH;
+
+		for (Point& point : points) {
+			bool isTransformed = true;
+
+			if (minW > point.x) {
+				point.x = 0;
+			}
+			else if (point.x >= maxW) {
+				point.x = src.cols;
+			}
+			else {
+				isTransformed = false;
+			}
+
+			if (minH > point.y) {
+				point.y = 0;
+			}
+			else if (point.y >= maxH) {
+				point.y = src.rows;
+			}
+			else {
+				isTransformed = false;
+			}
+		}
+	}
+
+	cv::Mat AtlasGenerator::GetImagePolygon(AtlasGeneratorItem& item, AtlasGeneratorConfig& config)
 	{
 		using namespace cv;
 
+		cv::Mat image = AtlasGenerator::ImagePreprocess(item.image);
+
+		if (config.scaleFactor > 1) {
+			Size imageSize(
+				(int)ceil(image.cols / config.scaleFactor),
+				(int)ceil(image.rows / config.scaleFactor));
+
+			imageSize.width = clamp(imageSize.width, 1, MaxTextureDimension);
+			imageSize.height = clamp(imageSize.height, 1, MaxTextureDimension);
+
+			resize(image, image, imageSize);
+		}
+
 		Mat polygonMask;
-		switch (item.image.channels())
+		switch (image.channels())
 		{
 		case 4:
-			extractChannel(item.image, polygonMask, 3);
+			extractChannel(image, polygonMask, 3);
 			break;
 		case 2:
-			extractChannel(item.image, polygonMask, 1);
+			extractChannel(image, polygonMask, 1);
 			break;
 		default:
-			polygonMask = Mat(item.image.size(), CV_8UC1, Scalar(255));
+			polygonMask = Mat(image.size(), CV_8UC1, Scalar(255));
 			break;
 		}
 
 		Rect imageBounds = boundingRect(polygonMask);
 
+		// Image croping by alpha
+		image = image(imageBounds);
+		polygonMask = polygonMask(imageBounds);
+
 		Size srcSize = item.image.size();
 		Size dstSize = polygonMask.size();
 
-		image = item.image(imageBounds);
-		polygonMask = polygonMask(imageBounds);
-
-		if (IsRectangle(item.image, config)) {
+		if (IsRectangle(image, config)) {
 			item.polygon = vector<AtlasGeneratorVertex>(4);
 
 			item.polygon[0].uv = { 0, 0 };
-			item.polygon[1].uv = { 0, item.image.rows };
-			item.polygon[2].uv = { item.image.cols, item.image.rows };
-			item.polygon[3].uv = { item.image.cols, 0 };
+			item.polygon[1].uv = { 0, dstSize.height };
+			item.polygon[2].uv = { dstSize.width, dstSize.height };
+			item.polygon[3].uv = { dstSize.width, 0 };
 
 			item.polygon[0].xy = { 0, 0 }; 
-			item.polygon[1].xy = { 0, item.image.rows };
-			item.polygon[2].xy = { item.image.cols, item.image.rows }; 
-			item.polygon[3].xy = { item.image.cols, 0 }; 
+			item.polygon[1].xy = { 0, dstSize.height };
+			item.polygon[2].xy = { dstSize.width, dstSize.height };
+			item.polygon[3].xy = { dstSize.width, 0 };
 
-			return AtlasGeneratorResult::OK;
+			return image;
 		}
 		else {
 			item.polygon.clear();
 		}
 
+		polygonMask = AtlasGenerator::MaskPreprocess(polygonMask);
 		vector<Point> contour = GetImageContour(polygonMask);
-#ifdef CV_DEBUG
-		ShowContour(item.image, contour);
-#endif
-		vector<Point> contourHull;
-		vector<Point> polygon;
 
-		SnapPoints(polygonMask, contour);
-
+		vector<cv::Point> polygon;
 		convexHull(contour, polygon, true);
-		
-
-#ifdef CV_DEBUG
-		ShowContour(item.image, polygon);
-#endif
+		ExtrudePoints(polygonMask, polygon);
 
 		for (const Point point : polygon) {
 			item.polygon.push_back(
@@ -197,10 +230,10 @@ namespace sc {
 		}
 
 #ifdef CV_DEBUG
-		ShowContour(item.image, item.polygon);
+		ShowContour(image, item.polygon);
 #endif
 
-		return AtlasGeneratorResult::OK;
+		return image;
 	};
 
 	bool AtlasGenerator::IsRectangle(cv::Mat& image, AtlasGeneratorConfig& config)
@@ -210,19 +243,20 @@ namespace sc {
 		Size size = image.size();
 		int channels = image.channels();
 
-		if (size.width < (config.maxSize.first * 3 / 100) && size.height < (config.maxSize.second * 3 / 100)) {
-			return true;
-		}
-
 		// Image has no alpha. It makes no sense to generate a polygon
 		if (channels == 1 || channels == 3) {
 			return true;
 		}
 
+		if (size.width < (config.maxSize.first * 3 / 100) && size.height < (config.maxSize.second * 3 / 100)) {
+			return true;
+		}
+		
+
 		return false;
 	};
 
-	void AtlasGenerator::PlaceImage(cv::Mat& src, cv::Mat& dst, uint16_t x, uint16_t y)
+	void AtlasGenerator::PlaceImageTo(cv::Mat& src, cv::Mat& dst, uint16_t x, uint16_t y)
 	{
 		using namespace cv;
 
@@ -264,7 +298,7 @@ namespace sc {
 		}
 	};
 
-	uint32_t AtlasGenerator::GetImageIndex(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range) {
+	uint32_t AtlasGenerator::SearchDuplicate(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range) {
 		using namespace cv;
 
 		for (uint32_t i = 0; range > i; i++) {
@@ -303,7 +337,6 @@ namespace sc {
 					}
 				}
 			}
-
 		}
 
 		return true;
@@ -319,18 +352,17 @@ namespace sc {
 		// Vector with polygons for libnest2d
 		vector<Item> packerItems;
 
-		// Croped images
+		// Atlas sprites
 		vector<cv::Mat> images;
 
 		for (uint32_t i = 0; items.size() > i; i++) {
 			AtlasGeneratorItem& item = items[i];
-			uint32_t imageIndex = GetImageIndex(items, item.image, i);
+			uint32_t imageIndex = SearchDuplicate(items, item.image, i);
 
 			if (imageIndex == UINT32_MAX) {
 				// Polygon generation
-				cv::Mat polygonImage;
-				GetImagePolygon(item, polygonImage, config);
-				images.push_back(polygonImage);
+				cv::Mat atlasSprite = GetImagePolygon(item, config);
+				images.push_back(atlasSprite);
 
 				if (item.polygon.size() <= 0) {
 					return AtlasGeneratorResult::BAD_POLYGON;
@@ -357,10 +389,10 @@ namespace sc {
 		}
 
 		NestConfig<BottomLeftPlacer, DJDHeuristic> cfg;
-		cfg.placer_config.epsilon = config.extrude;
+		//cfg.placer_config.epsilon = config.extrude;
 		cfg.placer_config.allow_rotations = true;
 
-		size_t binCount = nest(packerItems, Box(config.maxSize.first, config.maxSize.second, { config.maxSize.first / 2, config.maxSize.second / 2 }), config.extrude, cfg, config.control);
+		size_t binCount = nest(packerItems, Box(config.maxSize.first, config.maxSize.second, { (int)ceil(config.maxSize.first / 2), (int)ceil(config.maxSize.second / 2) }), config.extrude, cfg, config.control);
 		if (binCount >= 0xFF) return AtlasGeneratorResult::TOO_MANY_IMAGES;
 
 		// Texture preparing
@@ -446,7 +478,7 @@ namespace sc {
 
 			auto x = getX(box.minCorner());
 			auto y = getY(box.minCorner());
-			PlaceImage(
+			PlaceImageTo(
 				sprite,
 				atlas,
 				static_cast<uint16_t>(x - config.extrude),

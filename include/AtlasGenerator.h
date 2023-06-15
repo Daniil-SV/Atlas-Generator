@@ -11,8 +11,14 @@
 
 #define MinTextureDimension 512
 #define MaxTextureDimension 4096
+
 #define MinExtrude 1
 #define MaxExtrude 5
+
+#define MinScaleFactor 1
+#define MaxScaleFactor 4
+
+#define PercentOf(proc, num) (num * proc / 100)
 
 using namespace std;
 using libnest2d::ProgressFunction;
@@ -37,7 +43,9 @@ namespace sc {
 
 		TextureType textureType = TextureType::RGBA;
 		pair<uint16_t, uint16_t> maxSize = { 2048, 2048 };
+		uint8_t scaleFactor = MinScaleFactor;
 		uint8_t extrude = 2;
+
 		libnest2d::NestControl control = {};
 	};
 
@@ -89,28 +97,32 @@ namespace sc {
 
 		static void ShowContour(cv::Mat src, vector<cv::Point> points) {
 			cv::Mat drawing = src.clone();
-			drawContours(drawing, vector<vector<cv::Point>>(1, points), 0, cv::Scalar(255, 255, 255), 2, cv::LINE_AA);
+			drawContours(drawing, vector<vector<cv::Point>>(1, points), 0, cv::Scalar(255, 255, 255), (int)PercentOf(2, (drawing.rows + drawing.cols) / 2), cv::LINE_AA);
 
 			for (cv::Point& point : points) {
-				circle(drawing, point, 5, { 0, 0, 255 });
+				circle(drawing, point, (int)PercentOf(5, (drawing.rows + drawing.cols) / 5), { 0, 0, 255 }, (int)PercentOf(3, (drawing.rows + drawing.cols) / 2), cv::LINE_AA);
 			}
 			ShowImage("Image polygon", drawing);
 			cv::destroyAllWindows();
 		}
 #endif
+		static void NormalizeConfig(AtlasGeneratorConfig& config);
+
 		static vector<cv::Point> GetImageContour(cv::Mat& image);
 
-		static void SnapPoints(cv::Mat src, vector<cv::Point>& points);
+		static cv::Mat GetImagePolygon(AtlasGeneratorItem& item, AtlasGeneratorConfig& config);
 
-		static AtlasGeneratorResult GetImagePolygon(AtlasGeneratorItem& item, cv::Mat& image, AtlasGeneratorConfig& config);
+		static cv::Mat ImagePreprocess(cv::Mat& src);
+		static cv::Mat MaskPreprocess(cv::Mat& src);
 
-		static void NormalizeConfig(AtlasGeneratorConfig& config);
+		static void SnapToBorder(cv::Mat src, vector<cv::Point>& points);
+		static void ExtrudePoints(cv::Mat src, vector<cv::Point>& points);
 
 		static bool IsRectangle(cv::Mat& image, AtlasGeneratorConfig& config);
 
-		static void PlaceImage(cv::Mat& src, cv::Mat& dst, uint16_t x, uint16_t y);
+		static void PlaceImageTo(cv::Mat& src, cv::Mat& dst, uint16_t x, uint16_t y);
 
-		static uint32_t GetImageIndex(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range);
+		static uint32_t SearchDuplicate(vector<AtlasGeneratorItem>& items, cv::Mat& image, uint32_t range);
 
 		static bool CompareImage(cv::Mat src1, cv::Mat src2);
 

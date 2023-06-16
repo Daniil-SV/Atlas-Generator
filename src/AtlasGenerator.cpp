@@ -20,19 +20,43 @@ namespace sc {
 		if (channels == 2 || channels == 4) {
 			for (uint16_t h = 0; size.height > h; h++) {
 				for (uint16_t w = 0; size.width > w; w++) {
-					bool isTransperent = false;
 
 					switch (channels)
 					{
 					case 4:
-						if (image.at<cv::Vec4b>(h, w)[3] < 4) {
+					{
+						Vec4b pixel = image.at<Vec4b>(h, w);
+
+						if (pixel[3] < 4) {
 							image.at<cv::Vec4b>(h, w) = { 0, 0, 0, 0 };
+							continue;
 						};
+
+						// Alpha premultiply
+
+						float alpha = static_cast<float>(pixel[3]) / 255.0f;
+						image.at<Vec4b>(h, w) = {
+							static_cast<uchar>(pixel[0] * alpha),
+							static_cast<uchar>(pixel[1] * alpha),
+							static_cast<uchar>(pixel[2] * alpha),
+							pixel[3]
+						};
+					}
 						break;
 					case 2:
-						if (image.at<cv::Vec2b>(h, w)[1] < 4) {
+					{
+						Vec2b pixel = image.at<Vec2b>(h, w);
+
+						if (pixel[1] < 4) {
 							image.at<cv::Vec2b>(h, w) = { 0, 0 };
+							continue;
 						};
+						float alpha = static_cast<float>(pixel[3]) / 255.0f;
+						image.at<Vec2b>(h, w) = {
+							static_cast<uchar>(pixel[0] * alpha),
+							pixel[1]
+						};
+					}
 						break;
 					}
 				}
@@ -45,7 +69,7 @@ namespace sc {
 	cv::Mat AtlasGenerator::MaskPreprocess(cv::Mat& src) {
 		using namespace cv;
 
-		Mat blurred; 
+		Mat blurred;
 		const double sigma = 5, amount = 2.5;
 
 		GaussianBlur(src, blurred, Size(), sigma, sigma);
@@ -162,17 +186,6 @@ namespace sc {
 
 		cv::Mat image = AtlasGenerator::ImagePreprocess(item.image);
 
-		if (config.scaleFactor > 1) {
-			Size imageSize(
-				(int)ceil(image.cols / config.scaleFactor),
-				(int)ceil(image.rows / config.scaleFactor));
-
-			imageSize.width = clamp(imageSize.width, 1, MaxTextureDimension);
-			imageSize.height = clamp(imageSize.height, 1, MaxTextureDimension);
-
-			resize(image, image, imageSize);
-		}
-
 		Mat polygonMask;
 		switch (image.channels())
 		{
@@ -204,7 +217,7 @@ namespace sc {
 			item.polygon[2].uv = { dstSize.width, dstSize.height };
 			item.polygon[3].uv = { dstSize.width, 0 };
 
-			item.polygon[0].xy = { 0, 0 }; 
+			item.polygon[0].xy = { 0, 0 };
 			item.polygon[1].xy = { 0, dstSize.height };
 			item.polygon[2].xy = { dstSize.width, dstSize.height };
 			item.polygon[3].xy = { dstSize.width, 0 };
@@ -222,10 +235,24 @@ namespace sc {
 		convexHull(contour, polygon, true);
 		ExtrudePoints(polygonMask, polygon);
 
+		if (config.scaleFactor > 1) {
+			Size imageSize(
+				(int)ceil(image.cols / config.scaleFactor),
+				(int)ceil(image.rows / config.scaleFactor));
+
+			imageSize.width = clamp(imageSize.width, 1, MaxTextureDimension);
+			imageSize.height = clamp(imageSize.height, 1, MaxTextureDimension);
+
+			resize(image, image, imageSize);
+		}
+
 		for (const Point point : polygon) {
 			item.polygon.push_back(
 				AtlasGeneratorVertex
-				(point.x + imageBounds.x, point.y + imageBounds.y, point.x, point.y)
+				(
+					point.x + imageBounds.x, point.y + imageBounds.y,
+					(uint16_t)ceil(point.x / config.scaleFactor), (uint16_t)ceil(point.y / config.scaleFactor)
+				)
 			);
 		}
 
@@ -234,7 +261,7 @@ namespace sc {
 #endif
 
 		return image;
-	};
+		};
 
 	bool AtlasGenerator::IsRectangle(cv::Mat& image, AtlasGeneratorConfig& config)
 	{
@@ -251,7 +278,6 @@ namespace sc {
 		if (size.width < (config.maxSize.first * 3 / 100) && size.height < (config.maxSize.second * 3 / 100)) {
 			return true;
 		}
-		
 
 		return false;
 	};
@@ -288,7 +314,7 @@ namespace sc {
 
 				switch (dst.channels())
 				{
-				case 4:
+				case 4: 
 					dst.at<Vec4b>(dstH, dstW) = pixel;
 					break;
 				default:
@@ -407,7 +433,7 @@ namespace sc {
 
 			auto shape = item.transformedShape();
 			auto box = item.boundingBox();
-			
+
 			cv::Size& size = textureSize[item.binId()];
 
 			auto x = getX(box.maxCorner());
@@ -455,14 +481,13 @@ namespace sc {
 			// Point processing
 			item.textureIndex = static_cast<uint8_t>(packerItem.binId());
 			for (size_t j = 0; item.polygon.size() > j; j++) {
-				
 				uint16_t x = item.polygon[j].uv.first;
 				uint16_t y = item.polygon[j].uv.second;
 
-				uint16_t u = (uint16_t)ceil(x * rotation.cos() - y * rotation.sin() + getX(packerItem.translation()) );
-				uint16_t v = (uint16_t)ceil(y * rotation.cos() + x * rotation.sin() + getY(packerItem.translation()) );
+				uint16_t u = (uint16_t)ceil(x * rotation.cos() - y * rotation.sin() + getX(packerItem.translation()));
+				uint16_t v = (uint16_t)ceil(y * rotation.cos() + x * rotation.sin() + getY(packerItem.translation()));
 
-				item.polygon[j].uv = {u, v};
+				item.polygon[j].uv = { u, v };
 			}
 
 			// Image processing
@@ -519,5 +544,5 @@ namespace sc {
 #endif // DEBUG
 
 		return AtlasGeneratorResult::OK;
+		}
 	}
-}

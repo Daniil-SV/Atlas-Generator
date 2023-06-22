@@ -36,7 +36,7 @@ int main()
     sc::AtlasGeneratorConfig config;
     config.maxSize = { 4096, 4096 };
     config.scaleFactor = 2;
-    config.control = ProgressFunction{ [](unsigned cnt) {
+    config.progress = function{ [](unsigned cnt) {
             std::cout << "Left: " << cnt << std::endl;
     } };
 

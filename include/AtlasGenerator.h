@@ -5,10 +5,6 @@
 
 #include <opencv2/opencv.hpp>
 
-#define LIBNEST2D_GEOMETRIES_clipper
-#define LIBNEST2D_OPTIMIZER_nlopt
-#include <libnest2d/libnest2d.hpp>
-
 #define MinTextureDimension 512
 #define MaxTextureDimension 4096
 
@@ -21,7 +17,6 @@
 #define PercentOf(proc, num) (num * proc / 100)
 
 using namespace std;
-using libnest2d::ProgressFunction;
 
 namespace sc {
 	enum class AtlasGeneratorResult {
@@ -47,7 +42,7 @@ namespace sc {
 		uint8_t scaleFactor = MinScaleFactor;
 		uint8_t extrude = 2;
 
-		libnest2d::NestControl control = {};
+		function<void(unsigned)> progress;
 	};
 
 	struct AtlasGeneratorVertex {

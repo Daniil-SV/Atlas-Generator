@@ -13,7 +13,8 @@ files {
 }
 
 includedirs {
-	"../include"
+	"%{wks.location}/include",
+	"%{wks.location}/ThirdParty/OpenCV/include"
 }
 
 links {
@@ -22,7 +23,7 @@ links {
 
 filter "configurations:Debug"
 links {
-	"../ThirdParty/lib/opencv/%{cfg.architecture}/%{cfg.system}/static/opencv_world470d"
+	"%{wks.location}/ThirdParty/OpenCV/lib/%{cfg.architecture}/%{cfg.system}/static/opencv_world470d"
 }
 defines { "DEBUG" }
 runtime "Debug"
@@ -30,7 +31,7 @@ symbols "on"
 
 filter "configurations:Release"
 links {
-	"../ThirdParty/lib/opencv/%{cfg.architecture}/%{cfg.system}/static/opencv_world470"
+	"../ThirdParty/OpenCV/lib/%{cfg.architecture}/%{cfg.system}/static/opencv_world470"
 }
 defines { "NDEBUG" }
 runtime "Release"

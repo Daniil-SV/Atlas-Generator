@@ -6,13 +6,3 @@ Test/output
 *.vcxproj
 *.vcxproj.*
 scripts/
-
-# Dependecies 
-ThirdParty/
-include/boost
-include/opencv2
-include/libnest2d
-
-include/clipper.hpp
-include/nlopt.hpp
-include/nlopt.h

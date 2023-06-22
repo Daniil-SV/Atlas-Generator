@@ -1,5 +1,9 @@
 #include "AtlasGenerator.h"
 
+#define LIBNEST2D_GEOMETRIES_clipper
+#define LIBNEST2D_OPTIMIZER_nlopt
+#include <libnest2d/libnest2d.hpp>
+
 namespace sc {
 	void AtlasGenerator::NormalizeConfig(AtlasGeneratorConfig& config)
 	{
@@ -422,7 +426,9 @@ namespace sc {
 		//cfg.placer_config.epsilon = config.extrude;
 		cfg.placer_config.allow_rotations = true;
 
-		size_t binCount = nest(packerItems, Box(config.maxSize.first, config.maxSize.second, { (int)ceil(config.maxSize.first / 2), (int)ceil(config.maxSize.second / 2) }), config.extrude, cfg, config.control);
+		libnest2d::NestControl control;
+		control.progressfn = config.progress;
+		size_t binCount = nest(packerItems, Box(config.maxSize.first, config.maxSize.second, { (int)ceil(config.maxSize.first / 2), (int)ceil(config.maxSize.second / 2) }), config.extrude, cfg, control);
 		if (binCount >= 0xFF) return AtlasGeneratorResult::TOO_MANY_IMAGES;
 
 		// Texture preparing

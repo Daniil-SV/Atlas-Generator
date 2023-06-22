@@ -10,12 +10,13 @@ targetdir "%{wks.location}/build/bin/%{cfg.buildcfg}/%{cfg.system}/%{cfg.archite
 
 files {
 	"include/**.h",
-	"include/**.hpp",
 	"src/**.cpp"
 }
 
 includedirs {
-	"include"
+	"include",
+	"ThirdParty/OpenCV/include",
+	"ThirdParty/libnest2d/include"
 }
 
 filter "system:windows"
@@ -24,8 +25,8 @@ defines { "_WINDOWS" }
 
 filter "configurations:Debug"
 links {
-	"ThirdParty/lib/libnest2d/%{cfg.architecture}/%{cfg.system}/nloptd",
-	"ThirdParty/lib/libnest2d/%{cfg.architecture}/%{cfg.system}/polyclippingd",
+	"ThirdParty/libnest2d/lib/%{cfg.architecture}/%{cfg.system}/nloptd",
+	"ThirdParty/libnest2d/lib/%{cfg.architecture}/%{cfg.system}/polyclippingd"
 }
 defines { "DEBUG" }
 runtime "Debug"
@@ -33,8 +34,8 @@ symbols "on"
 
 filter "configurations:Release"
 links {
-	"ThirdParty/lib/libnest2d/%{cfg.architecture}/%{cfg.system}/nlopt",
-	"ThirdParty/lib/libnest2d/%{cfg.architecture}/%{cfg.system}/polyclipping",
+	"ThirdParty/libnest2d/lib/%{cfg.architecture}/%{cfg.system}/nlopt",
+	"ThirdParty/libnest2d/lib/%{cfg.architecture}/%{cfg.system}/polyclipping"
 }
 defines { "NDEBUG" }
 runtime "Release"

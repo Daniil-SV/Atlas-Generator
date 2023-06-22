@@ -1,0 +1,6 @@
+[submodule "ThirdParty/OpenCV"]
+	path = ThirdParty/OpenCV
+	url = https://github.com/Daniil-SV/OpenCV-Binaries
+[submodule "ThirdParty/libnest2d"]
+	path = ThirdParty/libnest2d
+	url = https://github.com/Daniil-SV/libnest2d-Binaries

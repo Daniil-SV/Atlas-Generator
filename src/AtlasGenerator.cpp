@@ -221,10 +221,10 @@ namespace sc {
 			item.polygon[2].uv = { dstSize.width, dstSize.height };
 			item.polygon[3].uv = { dstSize.width, 0 };
 
-			item.polygon[0].xy = { 0, 0 };
-			item.polygon[1].xy = { 0, dstSize.height };
-			item.polygon[2].xy = { dstSize.width, dstSize.height };
-			item.polygon[3].xy = { dstSize.width, 0 };
+			item.polygon[0].xy = { imageBounds.x, imageBounds.y };
+			item.polygon[1].xy = { imageBounds.x, imageBounds.y + dstSize.height };
+			item.polygon[2].xy = { imageBounds.x + dstSize.width, imageBounds.y + dstSize.height };
+			item.polygon[3].xy = { imageBounds.x + dstSize.width, imageBounds.y };
 
 			return image;
 		}
